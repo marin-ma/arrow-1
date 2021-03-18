@@ -398,6 +398,7 @@ if(ARROW_DEFINE_OPTIONS)
   define_option(ARROW_WITH_SNAPPY "Build with Snappy compression" OFF)
   define_option(ARROW_WITH_ZLIB "Build with zlib compression" OFF)
   define_option(ARROW_WITH_ZSTD "Build with zstd compression" OFF)
+  define_option(ARROW_WITH_QAT "Build with QAT compression" OFF)
 
   define_option(ARROW_WITH_UCX
                 "Build with UCX transport for Arrow Flight;(only used if ARROW_FLIGHT is ON)"

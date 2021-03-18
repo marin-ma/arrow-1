@@ -313,6 +313,10 @@ if(ARROW_WITH_ZSTD)
   list(APPEND ARROW_SRCS util/compression_zstd.cc)
 endif()
 
+if(ARROW_WITH_QAT)
+  add_definitions(-DARROW_WITH_QAT)
+endif()
+
 set(ARROW_TESTING_SRCS
     io/test_common.cc
     ipc/test_common.cc

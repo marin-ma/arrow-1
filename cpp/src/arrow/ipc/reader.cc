@@ -597,6 +597,8 @@ Status GetCompression(const flatbuf::RecordBatch* batch, Compression::type* out)
       *out = Compression::LZ4_FRAME;
     } else if (compression->codec() == flatbuf::CompressionType::ZSTD) {
       *out = Compression::ZSTD;
+    } else if (compression->codec() == flatbuf::CompressionType::GZIP) {
+      *out = Compression::GZIP;
     } else {
       return Status::Invalid("Unsupported codec in RecordBatch::compression metadata");
     }
