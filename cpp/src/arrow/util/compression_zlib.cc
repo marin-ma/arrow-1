@@ -22,6 +22,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <iostream>
 
 #include <zconf.h>
 #include <zlib.h>
@@ -568,6 +569,7 @@ std::unique_ptr<Codec> MakeGZipCodec(int compression_level, GZipFormat::type for
   if (s == "QAT") {
 #ifdef ARROW_WITH_QAT
     using arrow::util::internal::QatCodec;
+    std::cout << "QAT is used as codec" << std::endl;
     return std::unique_ptr<Codec>(new QatCodec());
 #else
     ARROW_LOG(WARNING) << "Support for codec QAT not built";
@@ -576,6 +578,7 @@ std::unique_ptr<Codec> MakeGZipCodec(int compression_level, GZipFormat::type for
     ARROW_LOG(WARNING) << "Invalid backend for ARROW_GZIP_BACKEND: " << s
                        << ", only support QAT now";
   }
+  std::cout << "ZLIB is used as codec" << std::endl;
   return std::unique_ptr<Codec>(new GZipCodec(compression_level, format));
 }
 

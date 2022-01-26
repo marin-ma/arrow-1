@@ -640,6 +640,8 @@ Status GetCompression(const flatbuf::RecordBatch* batch, Compression::type* out)
       *out = Compression::ZSTD;
     } else if (compression->codec() == flatbuf::CompressionType::FASTPFOR) {
       *out = Compression::FASTPFOR;
+    } else if (compression->codec() == flatbuf::CompressionType::GZIP) {
+      *out = Compression::GZIP;
     } else {
       return Status::Invalid("Unsupported codec in RecordBatch::compression metadata");
     }

@@ -924,6 +924,8 @@ static Status GetBodyCompression(FBB& fbb, const IpcWriteOptions& options,
       codec = flatbuf::CompressionType::ZSTD;
     } else if (options.codec->compression_type() == Compression::FASTPFOR) {
       codec = flatbuf::CompressionType::FASTPFOR;
+    } else if (options.codec->compression_type() == Compression::GZIP) {
+      codec = flatbuf::CompressionType::GZIP;
     } else {
       return Status::Invalid("Unsupported IPC compression codec: ",
                              options.codec->name());
