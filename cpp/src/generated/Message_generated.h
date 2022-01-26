@@ -33,31 +33,34 @@ enum class CompressionType : int8_t {
   LZ4_FRAME = 0,
   ZSTD = 1,
   FASTPFOR = 2,
+  GZIP = 3,
   MIN = LZ4_FRAME,
-  MAX = ZSTD
+  MAX = GZIP
 };
 
-inline const CompressionType (&EnumValuesCompressionType())[3] {
+inline const CompressionType (&EnumValuesCompressionType())[4] {
   static const CompressionType values[] = {
     CompressionType::LZ4_FRAME,
     CompressionType::ZSTD,
-    CompressionType::FASTPFOR
+    CompressionType::FASTPFOR,
+    CompressionType::GZIP
   };
   return values;
 }
 
 inline const char * const *EnumNamesCompressionType() {
-  static const char * const names[4] = {
+  static const char * const names[5] = {
     "LZ4_FRAME",
     "ZSTD",
     "FASTPFOR",
+    "GZIP",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameCompressionType(CompressionType e) {
-  if (flatbuffers::IsOutRange(e, CompressionType::LZ4_FRAME, CompressionType::ZSTD)) return "";
+  if (flatbuffers::IsOutRange(e, CompressionType::LZ4_FRAME, CompressionType::GZIP)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesCompressionType()[index];
 }

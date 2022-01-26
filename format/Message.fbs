@@ -50,7 +50,8 @@ enum CompressionType:byte {
 
   // Zstandard
   ZSTD,
-  FASTPFOR
+  FASTPFOR,
+  GZIP
 }
 
 /// Provided for forward compatibility in case we need to support different
