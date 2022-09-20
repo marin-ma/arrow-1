@@ -510,6 +510,12 @@ class QatCodec : public Codec {
  public:
   Result<int64_t> Decompress(int64_t input_len, const uint8_t* input,
                              int64_t output_buffer_len, uint8_t* output_buffer) override {
+    QzSessionParamsDeflate_T params;
+
+    qzGetDefaultsDeflate(&params); //get the default value.
+    params.common_params.polling_mode = QZ_BUSY_POLLING; // To use busy polling mode
+    qzSetDefaultsDeflate(&params);
+
     uint32_t compressed_size = static_cast<uint32_t>(input_len);
     uint32_t uncompressed_size = static_cast<uint32_t>(output_buffer_len);
     int ret = qzDecompress(&g_qzSession, input, &compressed_size, output_buffer,
@@ -533,6 +539,12 @@ class QatCodec : public Codec {
 
   Result<int64_t> Compress(int64_t input_len, const uint8_t* input,
                            int64_t output_buffer_len, uint8_t* output_buffer) override {
+    QzSessionParamsDeflate_T params;
+
+    qzGetDefaultsDeflate(&params); //get the default value.
+    params.common_params.polling_mode = QZ_BUSY_POLLING; // To use busy polling mode
+    qzSetDefaultsDeflate(&params);
+
     uint32_t uncompressed_size = static_cast<uint32_t>(input_len);
     uint32_t compressed_size = static_cast<uint32_t>(output_buffer_len);
     int ret = qzCompress(&g_qzSession, input, &uncompressed_size, output_buffer,
@@ -557,6 +569,10 @@ class QatCodec : public Codec {
   }
 
   Compression::type compression_type() const override { return Compression::GZIP; }
+
+  int minimum_compression_level() const override { return kGZipMinCompressionLevel; }
+  int maximum_compression_level() const override { return kGZipMaxCompressionLevel; }
+  int default_compression_level() const override { return kGZipDefaultCompressionLevel; }
 };
 #endif
 
