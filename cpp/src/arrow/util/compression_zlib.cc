@@ -20,18 +20,18 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 #include <limits>
 #include <memory>
-#include <iostream>
 
 #include <zconf.h>
 #include <zlib.h>
 
 #include "arrow/result.h"
 #include "arrow/status.h"
+#include "arrow/util/io_util.h"
 #include "arrow/util/logging.h"
 #include "arrow/util/macros.h"
-#include "arrow/util/io_util.h"
 
 namespace arrow {
 namespace util {
@@ -502,18 +502,20 @@ class GZipCodec : public Codec {
 // ----------------------------------------------------------------------
 // QAT implementation
 #include <qatzip.h>
-__thread QzSession_T  g_qzSession = {
-  .internal = NULL,
+__thread QzSession_T g_qzSession = {
+    .internal = NULL,
 };
 
 class QatCodec : public Codec {
  public:
+  explicit QatCodec(QzPollingMode_T polling_mode) : polling_mode_(polling_mode) {}
+
   Result<int64_t> Decompress(int64_t input_len, const uint8_t* input,
                              int64_t output_buffer_len, uint8_t* output_buffer) override {
     QzSessionParamsDeflate_T params;
 
-    qzGetDefaultsDeflate(&params); //get the default value.
-    params.common_params.polling_mode = QZ_BUSY_POLLING; // To use busy polling mode
+    qzGetDefaultsDeflate(&params);  // get the default value.
+    params.common_params.polling_mode = polling_mode_;
     qzSetDefaultsDeflate(&params);
 
     uint32_t compressed_size = static_cast<uint32_t>(input_len);
@@ -522,9 +524,9 @@ class QatCodec : public Codec {
                            &uncompressed_size);
     if (ret == QZ_OK) {
       return static_cast<int64_t>(uncompressed_size);
-    } else if(ret == QZ_PARAMS) {
+    } else if (ret == QZ_PARAMS) {
       return Status::IOError("QAT decompression failure: params is invalid");
-    } else if(ret == QZ_FAIL) {
+    } else if (ret == QZ_FAIL) {
       return Status::IOError("QAT decompression failure: Function did not succeed");
     } else {
       return Status::IOError("QAT decompression failure with error:", ret);
@@ -541,8 +543,8 @@ class QatCodec : public Codec {
                            int64_t output_buffer_len, uint8_t* output_buffer) override {
     QzSessionParamsDeflate_T params;
 
-    qzGetDefaultsDeflate(&params); //get the default value.
-    params.common_params.polling_mode = QZ_BUSY_POLLING; // To use busy polling mode
+    qzGetDefaultsDeflate(&params);  // get the default value.
+    params.common_params.polling_mode = polling_mode_;
     qzSetDefaultsDeflate(&params);
 
     uint32_t uncompressed_size = static_cast<uint32_t>(input_len);
@@ -551,9 +553,9 @@ class QatCodec : public Codec {
                          &compressed_size, 1);
     if (ret == QZ_OK) {
       return static_cast<int64_t>(compressed_size);
-    } else if(ret == QZ_PARAMS) {
+    } else if (ret == QZ_PARAMS) {
       return Status::IOError("QAT compression failure: params is invalid");
-    } else if(ret == QZ_FAIL) {
+    } else if (ret == QZ_FAIL) {
       return Status::IOError("QAT compression failure: function did not succeed");
     } else {
       return Status::IOError("QAT compression failure with error:", ret);
@@ -573,6 +575,9 @@ class QatCodec : public Codec {
   int minimum_compression_level() const override { return kGZipMinCompressionLevel; }
   int maximum_compression_level() const override { return kGZipMaxCompressionLevel; }
   int default_compression_level() const override { return kGZipDefaultCompressionLevel; }
+
+ private:
+  QzPollingMode_T polling_mode_;
 };
 #endif
 
@@ -582,6 +587,7 @@ std::unique_ptr<Codec> MakeGZipCodec(int compression_level, GZipFormat::type for
   auto maybe_env_var = arrow::internal::GetEnvVar("ARROW_GZIP_BACKEND");
   if (!maybe_env_var.ok()) {
     // No user gzip backend settings
+    std::cout << "ZLIB is used as codec" << std::endl;
     return std::unique_ptr<Codec>(new GZipCodec(compression_level, format));
   }
 
@@ -591,8 +597,17 @@ std::unique_ptr<Codec> MakeGZipCodec(int compression_level, GZipFormat::type for
   if (s == "QAT") {
 #ifdef ARROW_WITH_QAT
     using arrow::util::internal::QatCodec;
-    std::cout << "QAT is used as codec" << std::endl;
-    return std::unique_ptr<Codec>(new QatCodec());
+    auto maybe_polling_mode = arrow::internal::GetEnvVar("QZ_POLLING_MODE");
+    if (maybe_polling_mode.ok()) {
+      const auto& polling_mode = std::move(maybe_polling_mode).ValueOrDie();
+      std::string polling_mode_u;
+      std::transform(polling_mode.begin(), polling_mode.end(), polling_mode_u.begin(),
+                     ::toupper);
+      if (polling_mode_u == "BUSY") {
+        return std::unique_ptr<Codec>(new QatCodec(QZ_BUSY_POLLING));
+      }
+    }
+    return std::unique_ptr<Codec>(new QatCodec(QZ_PERIODICAL_POLLING));
 #else
     ARROW_LOG(WARNING) << "Support for codec QAT not built";
 #endif
