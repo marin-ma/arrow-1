@@ -502,25 +502,24 @@ class GZipCodec : public Codec {
 // ----------------------------------------------------------------------
 // QAT implementation
 #include <qatzip.h>
-__thread QzSession_T g_qzSession = {
-    .internal = NULL,
-};
 
 class QatCodec : public Codec {
  public:
-  explicit QatCodec(QzPollingMode_T polling_mode) : polling_mode_(polling_mode) {}
+  explicit QatCodec(QzPollingMode_T polling_mode) : polling_mode_(polling_mode) {
+    QzSessionParamsDeflate_T params;
+    qzGetDefaultsDeflate(&params);  // get the default value.
+    params.common_params.polling_mode = polling_mode_;
+    auto status = qzSetupSessionDeflate(&qzSession, &params);
+    if (status < 0) {
+      std::cout << "Session setup failed with error: " << status << std::endl;
+    }
+  }
 
   Result<int64_t> Decompress(int64_t input_len, const uint8_t* input,
                              int64_t output_buffer_len, uint8_t* output_buffer) override {
-    QzSessionParamsDeflate_T params;
-
-    qzGetDefaultsDeflate(&params);  // get the default value.
-    params.common_params.polling_mode = polling_mode_;
-    qzSetDefaultsDeflate(&params);
-
     uint32_t compressed_size = static_cast<uint32_t>(input_len);
     uint32_t uncompressed_size = static_cast<uint32_t>(output_buffer_len);
-    int ret = qzDecompress(&g_qzSession, input, &compressed_size, output_buffer,
+    int ret = qzDecompress(&qzSession, input, &compressed_size, output_buffer,
                            &uncompressed_size);
     if (ret == QZ_OK) {
       return static_cast<int64_t>(uncompressed_size);
@@ -536,20 +535,14 @@ class QatCodec : public Codec {
   int64_t MaxCompressedLen(int64_t input_len,
                            const uint8_t* ARROW_ARG_UNUSED(input)) override {
     DCHECK_GE(input_len, 0);
-    return qzMaxCompressedLength(static_cast<size_t>(input_len), &g_qzSession);
+    return qzMaxCompressedLength(static_cast<size_t>(input_len), &qzSession);
   }
 
   Result<int64_t> Compress(int64_t input_len, const uint8_t* input,
                            int64_t output_buffer_len, uint8_t* output_buffer) override {
-    QzSessionParamsDeflate_T params;
-
-    qzGetDefaultsDeflate(&params);  // get the default value.
-    params.common_params.polling_mode = polling_mode_;
-    qzSetDefaultsDeflate(&params);
-
     uint32_t uncompressed_size = static_cast<uint32_t>(input_len);
     uint32_t compressed_size = static_cast<uint32_t>(output_buffer_len);
-    int ret = qzCompress(&g_qzSession, input, &uncompressed_size, output_buffer,
+    int ret = qzCompress(&qzSession, input, &uncompressed_size, output_buffer,
                          &compressed_size, 1);
     if (ret == QZ_OK) {
       return static_cast<int64_t>(compressed_size);
@@ -577,6 +570,7 @@ class QatCodec : public Codec {
   int default_compression_level() const override { return kGZipDefaultCompressionLevel; }
 
  private:
+  QzSession_T qzSession = {0};
   QzPollingMode_T polling_mode_;
 };
 #endif
@@ -599,14 +593,15 @@ std::unique_ptr<Codec> MakeGZipCodec(int compression_level, GZipFormat::type for
     using arrow::util::internal::QatCodec;
     auto maybe_polling_mode = arrow::internal::GetEnvVar("QZ_POLLING_MODE");
     if (maybe_polling_mode.ok()) {
-      const auto& polling_mode = std::move(maybe_polling_mode).ValueOrDie();
-      std::string polling_mode_u;
-      std::transform(polling_mode.begin(), polling_mode.end(), polling_mode_u.begin(),
-                     ::toupper);
-      if (polling_mode_u == "BUSY") {
+      std::string polling_mode = *std::move(maybe_polling_mode);
+      std::transform(polling_mode.begin(), polling_mode.end(), polling_mode.begin(),
+                     [](unsigned char c) { return std::toupper(c); });
+      if (polling_mode == "BUSY") {
+        std::cout << "=== Busy polling mode ====" << std::endl;
         return std::unique_ptr<Codec>(new QatCodec(QZ_BUSY_POLLING));
       }
     }
+    std::cout << "=== Periodical polling mode ====" << std::endl;
     return std::unique_ptr<Codec>(new QatCodec(QZ_PERIODICAL_POLLING));
 #else
     ARROW_LOG(WARNING) << "Support for codec QAT not built";
