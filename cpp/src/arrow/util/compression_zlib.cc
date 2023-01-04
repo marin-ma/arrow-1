@@ -506,12 +506,17 @@ class GZipCodec : public Codec {
 class QatCodec : public Codec {
  public:
   explicit QatCodec(QzPollingMode_T polling_mode) : polling_mode_(polling_mode) {
-    QzSessionParamsDeflate_T params;
-    qzGetDefaultsDeflate(&params);  // get the default value.
-    params.common_params.polling_mode = polling_mode_;
-    auto status = qzSetupSessionDeflate(&qzSession, &params);
-    if (status < 0) {
-      std::cout << "Session setup failed with error: " << status << std::endl;
+    auto rc = qzInit(&qzSession, 1);
+    if (rc == QZ_OK || rc == QZ_DUPLICATE) {
+      QzSessionParamsDeflate_T params;
+      qzGetDefaultsDeflate(&params);  // get the default value.
+      params.common_params.polling_mode = polling_mode_;
+      auto status = qzSetupSessionDeflate(&qzSession, &params);
+      if (status < 0) {
+        std::cout << "Session setup failed with error: " << status << std::endl;
+      }
+    } else {
+      std::cout << "qzInit failed with error: " << rc << std::endl;
     }
   }
 
