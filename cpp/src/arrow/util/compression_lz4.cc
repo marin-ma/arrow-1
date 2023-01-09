@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 #include <memory>
 
 #include <lz4.h>
@@ -29,6 +30,7 @@
 #include "arrow/status.h"
 #include "arrow/util/bit_util.h"
 #include "arrow/util/endian.h"
+#include "arrow/util/io_util.h"
 #include "arrow/util/logging.h"
 #include "arrow/util/macros.h"
 #include "arrow/util/ubsan.h"
@@ -526,9 +528,72 @@ class Lz4HadoopCodec : public Lz4Codec {
   int default_compression_level() const override { return kUseDefaultCompressionLevel; }
 };
 
+#ifdef ARROW_WITH_QAT
+// ----------------------------------------------------------------------
+// QAT implementation
+#include <qatzip.h>
+#include "arrow/util/qat_util.h"
+
+class QatLz4FrameCodec : public QatCodec {
+ public:
+  explicit QatLz4FrameCodec(QzPollingMode_T polling_mode) : QatCodec(polling_mode) {
+    auto rc = qzInit(&qzSession, 1);
+    if (QZ_INIT_FAIL(rc)) {
+      ARROW_LOG(WARNING) << "qzInit failed with error: " << rc;
+    } else {
+      QzSessionParamsLZ4_T params;
+      qzGetDefaultsLZ4(&params);  // get the default value.
+      params.common_params.polling_mode = polling_mode_;
+      rc = qzSetupSessionLZ4(&qzSession, &params);
+      if (QZ_SETUP_SESSION_FAIL(rc)) {
+        ARROW_LOG(WARNING) << "qzSetupSession failed with error: " << rc;
+      }
+    }
+  }
+
+  Compression::type compression_type() const override { return Compression::LZ4_FRAME; }
+
+  int minimum_compression_level() const override { return kUseDefaultCompressionLevel; }
+  int maximum_compression_level() const override { return kUseDefaultCompressionLevel; }
+  int default_compression_level() const override { return kUseDefaultCompressionLevel; }
+};
+#endif
+
 }  // namespace
 
 std::unique_ptr<Codec> MakeLz4FrameCodec(int compression_level) {
+  auto maybe_env_var = arrow::internal::GetEnvVar("ARROW_LZ4_BACKEND");
+  if (!maybe_env_var.ok()) {
+    ARROW_LOG(INFO) << "No user backend settings. LZ4 is used as codec.";
+    return std::unique_ptr<Codec>(new Lz4FrameCodec(compression_level));
+  }
+
+  std::string s = *std::move(maybe_env_var);
+  std::transform(s.begin(), s.end(), s.begin(),
+                 [](unsigned char c) { return std::toupper(c); });
+  if (s == "QAT") {
+#ifdef ARROW_WITH_QAT
+    using arrow::util::internal::QatCodec;
+    auto maybe_polling_mode = arrow::internal::GetEnvVar("QZ_POLLING_MODE");
+    if (maybe_polling_mode.ok()) {
+      std::string polling_mode = *std::move(maybe_polling_mode);
+      std::transform(polling_mode.begin(), polling_mode.end(), polling_mode.begin(),
+                     [](unsigned char c) { return std::toupper(c); });
+      if (polling_mode == "BUSY") {
+        std::cout << "=== Busy polling mode ====" << std::endl;
+        return std::unique_ptr<Codec>(new QatLz4FrameCodec(QZ_BUSY_POLLING));
+      }
+    }
+    std::cout << "=== Periodical polling mode ====" << std::endl;
+    return std::unique_ptr<Codec>(new QatLz4FrameCodec(QZ_PERIODICAL_POLLING));
+#else
+    ARROW_LOG(WARNING) << "Support for codec QAT not built";
+#endif
+  } else if (!s.empty()) {
+    ARROW_LOG(WARNING) << "Invalid backend for ARROW_LZ4_BACKEND: " << s
+                       << ", only support QAT now";
+  }
+  ARROW_LOG(WARNING) << "LZ4 is used as codec.";
   return std::unique_ptr<Codec>(new Lz4FrameCodec(compression_level));
 }
 
