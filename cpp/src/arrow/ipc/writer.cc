@@ -180,7 +180,8 @@ class RecordBatchSerializer {
                         std::shared_ptr<Buffer>* out) {
     // Convert buffer to uncompressed-length-prefixed compressed buffer
     int64_t maximum_length = codec->MaxCompressedLen(buffer.size(), buffer.data());
-    ARROW_ASSIGN_OR_RAISE(auto result, AllocateBuffer(maximum_length + sizeof(int64_t)));
+    ARROW_ASSIGN_OR_RAISE(auto result,
+                          AllocateBuffer(maximum_length + sizeof(int64_t), options_.memory_pool));
 
     int64_t actual_length;
     ARROW_ASSIGN_OR_RAISE(actual_length,
